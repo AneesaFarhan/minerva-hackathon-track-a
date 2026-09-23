@@ -4,7 +4,9 @@ A map-based decision-support web application that identifies refill deserts acro
 
 Built as a focused v1 around one planning question: **where should new refill points be added in Tokyo to reduce single-use bottle dependence most effectively?**
 
-**Live demo:** `https://<your-github-username>.github.io/<repo-name>/` (see deployment section below)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-deployed-blue)](https://aneesafarhan.github.io/minerva-hackathon-track-a/)
+
+**Live demo:** [https://aneesafarhan.github.io/minerva-hackathon-track-a/](https://aneesafarhan.github.io/minerva-hackathon-track-a/)
 
 ---
 
@@ -15,8 +17,8 @@ Because the app loads JSON data via `fetch()`, browsers block it from `file://` 
 ### Option A — Python (no install if you have Python 3)
 
 ```bash
-git clone https://github.com/<your-username>/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/aneesafarhan/minerva-hackathon-track-a.git
+cd minerva-hackathon-track-a
 python3 -m http.server 8000
 ```
 
@@ -25,8 +27,8 @@ Then open `http://localhost:8000` in your browser.
 ### Option B — Node.js (if you prefer)
 
 ```bash
-git clone https://github.com/<your-username>/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/aneesafarhan/minerva-hackathon-track-a.git
+cd minerva-hackathon-track-a
 npx serve .
 ```
 
@@ -52,7 +54,7 @@ The repo ships with a ready-to-go GitHub Actions workflow (`.github/workflows/de
 4. Push any commit to `main` (or go to **Actions** → **Deploy to GitHub Pages** → **Run workflow** manually).
 5. Within a minute, the live URL appears at the top of the Pages settings page.
 
-Your URL will be `https://<username>.github.io/<repo-name>/`. Share that with judges.
+Your URL is `https://aneesafarhan.github.io/minerva-hackathon-track-a/`. Share that with judges.
 
 ### Alternative: "Deploy from branch" (no Actions)
 
@@ -78,7 +80,7 @@ git branch -M main
 
 # Create a new empty repo on GitHub first (no README, no .gitignore, no license —
 # we already have those). Then connect it:
-git remote add origin https://github.com/<your-username>/<repo-name>.git
+git remote add origin https://github.com/aneesafarhan/minerva-hackathon-track-a.git
 git push -u origin main
 ```
 
@@ -262,7 +264,7 @@ The chart lets the user see not just coverage at 500 m but the full curve — so
 ## File Structure
 
 ```
-tokyo-refill-tool/
+minerva-hackathon-track-a/
 ├── index.html                      # The application
 ├── README.md                       # This file
 ├── LICENSE                         # MIT
