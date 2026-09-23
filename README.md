@@ -1,272 +1,70 @@
 # Tokyo Refill Infrastructure Decision Tool
 
-A map-based decision-support web application that identifies refill deserts across Tokyo's 23 Special Wards, ranks candidate locations for new refill points, and simulates coverage improvements under different expansion scenarios.
-
-Built as a focused v1 around one planning question: **where should new refill points be added in Tokyo to reduce single-use bottle dependence most effectively?**
+**A map-based decision-support tool for identifying refill deserts and optimising new refill point placement across Tokyo**
 
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-deployed-blue)](https://aneesafarhan.github.io/minerva-hackathon-track-a/)
 
-**Live demo:** [https://aneesafarhan.github.io/minerva-hackathon-track-a/](https://aneesafarhan.github.io/minerva-hackathon-track-a/)
+---
+
+## Overview
+
+Japan generated **7.69 million tonnes of plastic waste in 2023**, and despite an official recycling rate above 85%, only **6% is actually recycled and reused domestically** — the rest is thermally recycled, meaning incinerated. Japan is the world's second-largest producer of plastic packaging waste per capita, with containers and packaging making up **64% of plastic waste discharged at waste stations** in FY2023.
+
+**mymizu**, Japan's water refill app, has built an open dataset of over 200,000 refill spots worldwide with dense coverage across Tokyo — one of the most granular pictures of sustainable infrastructure in the city. But the network has gaps, and no existing tool identifies *where* new refill points would meaningfully reduce single-use bottle dependence.
+
+Built for the **Minerva Hackathon Technical Track A — Build for Zero Waste**, this tool answers one focused planning question: **where should new refill points be added in Tokyo to reduce single-use bottle dependence most effectively?**
 
 ---
 
-## Quick Start (Local)
+## Live Demo
 
-Because the app loads JSON data via `fetch()`, browsers block it from `file://` URLs for security (CORS). You need a tiny local HTTP server. Pick one:
+**[https://aneesafarhan.github.io/minerva-hackathon-track-a/](https://aneesafarhan.github.io/minerva-hackathon-track-a/)**
 
-### Option A — Python (no install if you have Python 3)
-
-```bash
-git clone https://github.com/aneesafarhan/minerva-hackathon-track-a.git
-cd minerva-hackathon-track-a
-python3 -m http.server 8000
-```
-
-Then open `http://localhost:8000` in your browser.
-
-### Option B — Node.js (if you prefer)
-
-```bash
-git clone https://github.com/aneesafarhan/minerva-hackathon-track-a.git
-cd minerva-hackathon-track-a
-npx serve .
-```
-
-Then open the URL printed in the terminal (usually `http://localhost:3000`).
-
-### Option C — VS Code Live Server
-
-Install the "Live Server" extension, open the project folder, right-click `index.html` → "Open with Live Server."
-
-If you open `index.html` directly by double-clicking it, the app will detect the CORS error and show an inline error message explaining how to fix it.
+The interactive dashboard lets you explore:
+- A live heatmap of refill deserts and demand hotspots across Tokyo's 23 Special Wards
+- The top 15 recommended new refill sites, ranked and explained in plain language
+- Adjustable scoring weights (gap / demand / spacing) that re-rank recommendations live
+- A before/after coverage simulator for any number of new refill points (0–30)
 
 ---
 
-## Deploy to GitHub Pages
+## Problem Statement
 
-The repo ships with a ready-to-go GitHub Actions workflow (`.github/workflows/deploy.yml`) that auto-publishes every push to `main`.
-
-**One-time setup on GitHub:**
-
-1. Push the repo to GitHub (see _Pushing to GitHub_ below if starting fresh).
-2. Go to the repo on GitHub → **Settings** → **Pages**.
-3. Under **Build and deployment** → **Source**, pick **"GitHub Actions"**.
-4. Push any commit to `main` (or go to **Actions** → **Deploy to GitHub Pages** → **Run workflow** manually).
-5. Within a minute, the live URL appears at the top of the Pages settings page.
-
-Your URL is `https://aneesafarhan.github.io/minerva-hackathon-track-a/`. Share that with judges.
-
-### Alternative: "Deploy from branch" (no Actions)
-
-If you prefer the older Pages flow:
-
-1. **Settings** → **Pages** → **Source**: "Deploy from a branch"
-2. **Branch**: `main`, **Folder**: `/ (root)`
-3. Save. Wait ~1 minute. Your URL appears.
-
-The `.nojekyll` file in the repo root prevents GitHub from running Jekyll on the content, which would otherwise ignore any files or folders starting with underscores.
+| Dimension | Detail |
+|-----------|--------|
+| Scope | Tokyo's 23 Special Wards |
+| Existing refill points | 112 (mymizu-modeled distribution) |
+| Candidate new sites | 64 real locations (stations, libraries, parks, universities) |
+| Analysis grid | ~2.8k hex cells, ~1.1 km resolution |
+| Challenge | No existing tool combines refill coverage, building/demand data, and ward statistics into a single actionable ranking of where new refill points should go |
 
 ---
 
-## Pushing to GitHub (if starting from a fresh clone)
+## System
 
-From this folder:
+### Stage 1 — Hex Grid & Scoring
+A uniform hex grid (~1.1 km cells) is built over the Tokyo 23-ward bounding box. Every hex and every candidate site receives three 0–100 scores:
 
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
+- **Gap score** — distance to the nearest existing refill point (`min(100, nearest_m / 12)` for candidates, `/15` for hex cells)
+- **Demand score** — exponentially decaying weighted sum of proximity to 48 transit/commercial demand anchors, matching a ~0.9 km walkable service radius
+- **Combined score** — user-controlled weighted sum of gap, demand, and spacing (default weights: 0.50 / 0.30 / 0.20)
 
-# Create a new empty repo on GitHub first (no README, no .gitignore, no license —
-# we already have those). Then connect it:
-git remote add origin https://github.com/aneesafarhan/minerva-hackathon-track-a.git
-git push -u origin main
-```
+A hex is flagged a **desert** past 800 m from the nearest refill point (~10 min walk), and **covered** within 500 m — the threshold the simulator reports against.
 
-After the first push, GitHub Actions will kick off automatically and deploy to Pages.
+### Stage 2 — Greedy Ranking with Spacing Correction
+Naive top-N-by-score selection clusters recommendations in the same underserved pocket. Instead, candidates are selected greedily one at a time: after each pick, every remaining candidate's spacing score is recalculated against everything already selected (existing points + prior picks), spreading recommendations across the city without hard distance constraints.
 
----
-
-## What the App Does
-
-When you open it, the app runs four staged computations:
-
-1. **Loads data** from `./data/*.json` (4 files, ~30 KB total).
-2. **Builds a hex grid** over the Tokyo 23-ward bounding box (~1.1 km cells, filtered to populated areas).
-3. **Computes per-hex metrics**: nearest-refill distance, gap score, demand score, combined priority.
-4. **Scores every candidate site** on the same dimensions.
-5. **Runs a baseline scenario**: greedy selection of the top 10 candidates, before/after coverage computed against all 2.8k+ hexes.
-
-Then the interface is live:
-
-- **Header metric cards** show live totals (refill points mapped, deserts detected, underserved wards, top priority ward).
-- **Left panel** controls layers, heatmap view mode (gap / demand / combined), scoring weight sliders, and candidate-type filter.
-- **Center map** shows everything spatially: refill points, heatmap, candidates, top-ranked recommendations, ward labels.
-- **Right panel** ranks the top 15 recommended sites and the top 10 underserved wards. Clicking a recommendation opens a detail panel with plain-language rationale.
-- **Footer scenario panel** lets you adjust N (0–30 new points) and the scoring weights, then re-run. You get before/after coverage @ 500 m, mean distance, deserts resolved, high-demand areas newly served, and a dual-line coverage curve.
+### Stage 3 — Scenario Simulation
+For any chosen N (0–30 new points) and any scoring weights, the simulator computes before/after coverage at 500 m, mean nearest-distance, deserts resolved, and high-demand areas newly served — rendered as a dual-line coverage curve across 200–1500 m thresholds, so the full impact curve is visible, not just a single coverage number.
 
 ---
 
-## Architecture
-
-Static web app. No backend. No build step. No framework.
-
-```
-Browser
-  ├── Leaflet 1.9.4           (map rendering, layer management)
-  ├── Turf.js 6.5.0            (hex grid generation, geodesic distance)
-  ├── Chart.js 4.4.1           (before/after coverage curves)
-  └── Custom JS (~1000 lines)  (scoring, ranking, simulation, UI)
-
-Data (loaded via fetch on page load):
-  ├── data/refill_points.json       (112 existing mymizu-style points)
-  ├── data/candidate_sites.json     (64 potential new locations)
-  ├── data/tokyo_wards.json         (23 wards + real stats)
-  └── data/demand_anchors.json      (48 transit/commercial hubs)
-
-Basemap: CartoDB Voyager (no labels) via tile CDN.
-```
-
-All three JS libraries load from public CDNs (unpkg, jsdelivr). No npm install required. First page load needs internet; hex grid then computes locally and stays cached in memory.
-
-### Why split the data?
-
-The data is in `./data/` as separate JSON files so you can edit any of them (add more refill points, adjust demand anchor weights, swap in a different candidate pool) without touching the HTML. Reload the page and the app picks up the new data.
-
-In particular, to plug in the **live mymizu feed**, you'd replace `data/refill_points.json` with a fetched response from the mymizu API, matching the schema:
-
-```json
-{
-  "meta": { "source": "...", "count": N },
-  "points": [
-    { "id": "...", "name": "...", "type": "...", "ward": "...", "lat": 35.6, "lng": 139.7 }
-  ]
-}
-```
-
----
-
-## Data Sources & Attribution
-
-The primary dataset `data/refill_points.json` is a **curated demo set** of 112 refill points modeled on the real mymizu distribution across Tokyo. In production, this should be replaced with the live mymizu feed:
-
-- **mymizu Refill Map** — github.com/mymizu/mymizu-web — the open dataset behind the mymizu app. Free API key available on request. 200,000+ refill spots worldwide with detailed Japan coverage.
-- **mymizu / Social Innovation Japan** — mymizu.co/home-en — the NPO behind mymizu. Attribution required for any use of their dataset.
-
-Supporting datasets used to build the candidate pool, demand layer, and ward overlay:
-
-- **OpenStreetMap** — openstreetmap.org — stations, public buildings, libraries, parks, universities, commercial anchors. The 48 demand anchors in `data/demand_anchors.json` are real station/landmark coordinates selected for activity weight.
-- **PLATEAU Project (MLIT)** — mlit.go.jp/plateau/en — Japan's official 3D city model. In production, building footprints and floor-area attributes from the 23-ward CityGML dataset would replace the coarse anchor-based demand proxy.
-- **PLATEAU Data Portal (G-Spatial)** — geospatial.jp — direct download of Tokyo building geometry.
-- **Tokyo Metropolitan Government Open Data** — portal.data.metro.tokyo.lg.jp — ward boundaries, population, daytime population. `data/tokyo_wards.json` uses 2024 TMG estimates.
-- **Ministry of the Environment Japan** — env.go.jp — national plastic waste and municipal solid waste survey data. Used for framing, not for calculation in this v1.
-
-The 64 candidate sites in `data/candidate_sites.json` are real Tokyo locations (stations, ward offices, libraries, parks, universities) selected as plausible refill hosts, weighted toward underserved outer wards.
-
----
-
-## Scoring Logic
-
-Every hex cell and every candidate site gets three scores on a 0–100 scale.
-
-### Gap score
-
-Measures how poorly a location is currently served by the existing refill network.
-
-```
-nearest_m   = geodesic distance (Turf) to the closest existing refill point
-gap_score   = min(100, nearest_m / 12)      for candidates
-            = min(100, nearest_m / 15)      for hex cells
-```
-
-A candidate 1.2 km from any refill point scores 100 (maximum gap). A candidate 240 m away scores 20.
-
-### Demand score
-
-Measures how much latent activity is present — proxying for "refill importance." Each of the 48 demand anchors contributes exponentially decaying weight:
-
-```
-demand_raw = Σ  anchor.weight × exp( -distance_km(hex, anchor) / 0.9 )
-              over all anchors
-demand_score = 100 × (demand_raw / max_demand_across_all_hexes)
-```
-
-The 0.9 km decay scale roughly matches walkable refill service radius. A location right next to Shinjuku Station (weight 100) with no competing anchors gets a score near 100; a location 2 km from the nearest mid-sized station (weight 40) gets something in the 15–25 range.
-
-### Combined / priority score
-
-A weighted sum the user controls via three sliders on the left panel:
-
-```
-combined = w_gap × gap  +  w_demand × demand  +  w_spacing × spacing
-                          (sliders default: 0.50, 0.30, 0.20)
-```
-
-For hex cells, spacing is ignored. For candidates, spacing is computed dynamically during greedy selection (below).
-
-### Desert threshold
-
-A hex is flagged `isDesert = true` when its nearest-refill distance exceeds **800 m** — roughly 10 minutes' walk. This is the cutoff the underserved-ward ranking uses.
-
-### Coverage threshold
-
-A hex is "covered" when its nearest-refill distance is ≤ **500 m**. The scenario simulator reports before/after coverage at this radius.
-
----
-
-## Ranking Method (Candidate Selection)
-
-Naive top-N-by-score fails because the highest-scoring candidates cluster in the same underserved pockets — picking all 10 would put them on the same block.
-
-Instead, ranking uses **greedy selection with a rolling spacing score**:
-
-```
-deployed = [ ... all existing refill points ... ]
-ranked   = []
-
-repeat N times:
-  for each remaining candidate c:
-    c.spacing = min(100, nearest_distance(c, deployed) / 15)     # meters / 15
-    c.final   = w_gap × c.gap + w_demand × c.demand + w_spacing × c.spacing
-  pick the candidate with highest c.final
-  ranked.append(picked)
-  deployed.append(picked)        # subsequent candidates now see it
-```
-
-Once a candidate is selected, every remaining candidate's spacing score is recomputed against it. The second pick gets its spacing penalty applied relative to the first pick; the third relative to both; and so on. This spreads recommendations across the city without requiring hard distance constraints.
-
----
-
-## Simulation Method
-
-"Run Scenario" executes:
-
-```
-1. Take the top-N ranked candidates (using current weights + filter).
-2. Build deployed set = existing refill points ∪ topN candidates.
-3. For every hex in the grid:
-      new_nearest_m = distance to closest point in deployed set
-4. Aggregate:
-      covered_before = % hexes with nearest_m ≤ 500 before
-      covered_after  = % hexes with nearest_m ≤ 500 after
-      mean_before    = mean nearest_m before
-      mean_after     = mean nearest_m after
-      deserts_resolved  = count of hexes that were desert (>800m) and are now not
-      hi_demand_served  = count of hexes with demand > 60 that moved from uncovered to covered
-5. Render before/after cards + Chart.js dual-line coverage curve across distance thresholds 200–1500 m.
-```
-
-The chart lets the user see not just coverage at 500 m but the full curve — so a scenario that improves 500 m coverage modestly but dramatically reduces deep-desert hexes becomes visible.
-
----
-
-## File Structure
+## Repository Structure
 
 ```
 minerva-hackathon-track-a/
 ├── index.html                      # The application
-├── README.md                       # This file
+├── README.md
 ├── LICENSE                         # MIT
 ├── .gitignore
 ├── .nojekyll                       # Tells GitHub Pages to skip Jekyll
@@ -282,57 +80,54 @@ minerva-hackathon-track-a/
 
 ---
 
-## Demo Flow (for presentations)
+## Tech Stack
 
-A 3-minute walkthrough:
+| Technology | Role |
+|------------|------|
+| Leaflet 1.9.4 | Map rendering, layer management |
+| Turf.js 6.5.0 | Hex grid generation, geodesic distance |
+| Chart.js 4.4.1 | Before/after coverage curves |
+| Vanilla JS (~1000 lines) | Scoring, ranking, simulation, UI |
 
-1. **Open the app.** Point out the 112 refill points clustered heavily in Shibuya/Shinjuku/Minato. The header shows live metrics including top priority ward.
-2. **Switch the heatmap to "Gap."** The burnt-orange cells in the outer wards show the refill deserts. Switch to "Demand." The glow over central Tokyo shows where people actually are. Switch to "Combined." The tool now highlights where high demand overlaps with low access — the real intervention priorities.
-3. **Show the top recommendations.** Click the #1 site in the right panel. The detail pane explains why: *"Sits inside a refill desert with very high local activity. Nearest existing refill is 920 m away."*
-4. **Adjust the weights.** Slide Gap down, Demand up. The rankings reshuffle — recommendations lean toward high-traffic central locations even when existing refill is nearby. Slide Demand down, Gap up. Rankings shift to outer wards.
-5. **Run a scenario.** Set N = 15. Click Run Simulation. Coverage jumps. The dual-line chart shows improvement across all walking distances. Point out "deserts resolved" and "high-demand areas newly served" as the two plain-language outcomes for stakeholders.
+Pure static site — no backend, no build step, no framework. All libraries load from public CDNs; only the initial page load needs internet, after which the hex grid computes and stays cached locally.
+
+---
+
+## Data Sources & Attribution
+
+- **mymizu Refill Map** — [github.com/mymizu/mymizu-web](https://github.com/mymizu/mymizu-web) — open dataset behind the mymizu app, 200,000+ refill spots worldwide with detailed Japan coverage. `data/refill_points.json` is a curated demo set modeled on the real mymizu distribution; production use should pull the live API feed.
+- **mymizu / Social Innovation Japan** — [mymizu.co/home-en](https://mymizu.co/home-en) — the NPO behind mymizu. Attribution required for any use of their dataset.
+- **PLATEAU Project (MLIT)** — [mlit.go.jp/plateau/en](https://www.mlit.go.jp/plateau/en/) — Japan's official 3D city model (CC BY 4.0). In production, building footprints and floor-area from the 23-ward CityGML dataset would replace the coarse anchor-based demand proxy used here.
+- **OpenStreetMap** — [openstreetmap.org](https://www.openstreetmap.org/) — the 48 demand anchors in `data/demand_anchors.json` are real station/landmark coordinates.
+- **Tokyo Metropolitan Government Open Data** — [portal.data.metro.tokyo.lg.jp](https://portal.data.metro.tokyo.lg.jp/) — ward boundaries, population, daytime population; `data/tokyo_wards.json` uses 2024 TMG estimates.
+- **Ministry of the Environment Japan** — [env.go.jp](https://www.env.go.jp/en/) — FY2023 national plastic and municipal waste survey data, used for framing.
+
+The 64 candidate sites in `data/candidate_sites.json` are real Tokyo locations weighted toward underserved outer wards.
+
+---
+
+## Key Design Decisions
+
+**Why a hex grid instead of ward boundaries?**
+Tokyo's wards are huge and uneven (Chiyoda 11 km², Ota 62 km²). A uniform ~1.1 km hex grid gives consistent spatial resolution that matches how planners actually think about walkable service areas.
+
+**Why greedy selection over an ILP solver?**
+64 candidates × 30 picks is fast and fully explainable with greedy selection — a meaningful property when presenting to non-technical stakeholders. An ILP formulation would be a natural production upgrade.
+
+**Why an anchor-based demand proxy instead of real footfall data?**
+Building-level floor area and ridership data (PLATEAU, MLIT) would be more accurate, but the 48 hand-weighted transit/commercial anchors give a reasonable v1 proxy without requiring a full CityGML pipeline in a one-day hackathon window.
+
+**Why show the full coverage curve instead of a single number?**
+A scenario that modestly improves 500 m coverage but dramatically reduces deep-desert hexes would look unremarkable at a single threshold. The dual-line chart across 200–1500 m makes that kind of improvement visible.
 
 ---
 
 ## Extending for Production
 
-The v1 is deliberately narrow. To harden it for real municipal use:
-
-**Data pipeline.** Subscribe to the mymizu API for live refill coverage — just swap `data/refill_points.json` with a fetched response. Extract building polygons from PLATEAU CityGML and aggregate floor area per hex to replace the anchor-based demand proxy. Pull ward boundary polygons from Tokyo Metropolitan Government Open Data and replace centroid dots with proper GeoJSON polygons.
-
-**Better demand proxy.** Instead of 48 hand-weighted anchors, use: (a) OSM amenity count per hex, (b) JR/Metro station ridership (MLIT open data), (c) daytime population density from TMG, (d) building floor area from PLATEAU. Normalize each, combine with configurable weights.
-
-**Real cost constraints.** Add a budget parameter. Each candidate site has an install cost (park = low, private commercial = high). Replace greedy-by-score with a budget-constrained knapsack over total impact.
-
-**Equity layer.** Add a ward-level socioeconomic index. Surface scenarios that explicitly improve coverage in lower-income wards.
-
-**Persistence.** Let users save scenarios to a URL hash so they can share specific configurations with colleagues.
-
----
-
-## Tech Choices (rationale)
-
-| Choice | Reason |
-|---|---|
-| Pure static site | Hackathon portability. No server, no build step. GitHub Pages ready. |
-| Leaflet over Mapbox/Google | No API key. MIT-licensed. Battle-tested for choropleth and heatmap overlays. |
-| Turf.js over a backend geo service | Runs in browser. Handles hex grid, centroid, geodesic distance out of the box. |
-| Hex grid over wards | Wards are huge and uneven (Chiyoda 11 km², Ota 62 km²). Hexes give a uniform 1.1 km resolution that planners expect. |
-| Greedy selection over ILP | 64 candidates × 30 picks is fast in greedy. Greedy is explainable to non-technical stakeholders. ILP would be a production upgrade. |
-| CartoDB Voyager no-labels basemap | Neutral, muted palette that lets the data layers sit on top without visual conflict. |
-
----
-
-## Troubleshooting
-
-**The page opens but shows "Could not load data files".**
-You opened `index.html` directly with `file://`. Browsers block cross-file reads for security. Use one of the local server options in _Quick Start_ above, or deploy to GitHub Pages.
-
-**GitHub Pages URL shows 404 or just a readme.**
-Check **Settings → Pages** — Source must be "GitHub Actions" (or "Deploy from branch: main / root"). Give the Actions workflow 1–2 minutes to finish.
-
-**Heatmap doesn't update when I move sliders.**
-Hard refresh the page (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows). The initial scenario computation runs once on load; sliders re-render immediately after.
+- **Live data pipeline** — swap `data/refill_points.json` for the live mymizu API feed; extract building floor area from PLATEAU CityGML to replace the anchor-based demand proxy; pull real ward polygons from TMG Open Data.
+- **Better demand proxy** — combine OSM amenity density, JR/Metro ridership (MLIT), daytime population (TMG), and PLATEAU floor area into a normalized, configurable-weight demand score.
+- **Real cost constraints** — add per-site install cost and replace greedy selection with a budget-constrained knapsack over total impact.
+- **Equity layer** — add a ward-level socioeconomic index and surface scenarios that explicitly prioritize lower-income wards.
 
 ---
 
